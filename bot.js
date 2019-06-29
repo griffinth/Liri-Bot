@@ -1,121 +1,151 @@
 require("dotenv").config();
 
 
-const axios = require("axios");
-const fs = require("fs");
-const keys = require("./spotify.js");
-const moment = require("moment");
-const Spotify = require("node-spotify-api");
 
-const spotify = new Spotify(keys.spotify);
+// variables
+var command = process.argv[2];
+var argument = process.argv[3];
+var request = require('request')
+var keys = require('./keys.js');
+var bandsintown = require('bandsintown')("codingbootcamp");
+var moment = require('moment');
+var fs = require("fs");
+var Spotify = require('node-spotify-api');
+var spotify = new Spotify(keys.spotify);
 
 
-const command = process.argv[2];
-const input = process.argv.slice(3).join("+");
-
-
-const processCommand = function (command, input) {
-    switch (command) {
-
-        case "concert-this":
-
-            axios
-
-                .get(
-                    "https://rest.bandsintown.com/artists/" +
-                    input +
-                    "/events?app_id=codingbootcamp"
-                )
-                //  pull back the response from bandsintown
-                .then(function (response) {
-
-                    const eventArray = response.data;
-                    eventArray.forEach(function (response) {
-
-                        const formattedDate = moment(response.datetime).format(
-                            "MM/DD/YYYY"
-                        );
-
-                        console.log(`${response.venue.name}
-                        ${response.venue.city}, ${response.venue.region}
-                        ${formattedDate}
-                        __________________________________________________`);
-
-                        err => {
-                            if (err) console.log(`Could not log due to ${err.message}`);
-                        }
-                    });
-                });
-            break;
-
-        case "spotify-this-song":
-            if (input === "") {
-
-                input = "The Search";
-            }
-
-            spotify.search({
-                    type: "track",
-                    query: `'${input}'`,
-                    limit: 1
-                },
-
-                function (err, data) {
-                    if (err) {
-                        return console.log("Error occurred: " + err);
-                    }
-
-                    console.log(`Artist: ${data.tracks.items[0].album.artists[0].name}
-                                Song: ${data.tracks.items[0].name}`);
-
-                    const previewURL = data.tracks.items[0].preview_url;
-                    console.log(
-                        previewURL === null ?
-                        "Preview not available for this song" :
-                        `Preview: ${previewURL}`);
-
-                    console.log(`Album: ${data.tracks.items[0].album.name}`);
-                }
-            );
-            break;
-
-        case "movie-this":
-            if (input === "") {
-
-                input = "The Matrix";
-            }
-
-            axios
-
-                .get(
-                    "http://www.omdbapi.com/?t=" + input + "&y=&plot=short&apikey=e8cc34df"
-                )
-
-                .then(function (response) {
-                    console.log(`Title: ${response.data.Title}
-                    Release Year: ${response.data.Year}
-                    IMDB Rating: ${response.data.imdbRating}
-                    Rotten Tomatoes Rating: ${response.data.Ratings[1].Value}
-                    Country: ${response.data.Country}
-                    Language: ${response.data.Language}
-                    Plot: ${response.data.Plot}
-                    Actors: ${response.data.Actors}`);
-                });
-            break;
-
-        case "do-what-it-says":
-            fs.readFile("random.txt", "utf8", function (err, data) {
-                if (err) throw err;
-
-                var randomText = data.split(",");
-
-                if (randomText.length == 2) {
-                    processCommand(randomText[0], randomText[1]);
-                } else if (randomText.length == 1) {
-                    processCommand(randomText[0]);
-                }
-            });
+// command functions
+function spotifySong(){
+    if (argument === undefined) {
+        argument = `"Sweet Child of Mine`
     }
+    console.log('spotify this song: ' + argument);
+    spotify.search({
+            type: 'track',
+            query: argument,
+            limit: 1,
+        }, function (err, data) {
+            if (err) {
+                console.log('Error occured: ' + err);
+            }
+            music = data.tracks.items[0];
+            console.log(`
+        ${music.name}
+        ${'Album: ' + music.album.name}
+        ${'Artist: ' + music.album.artists[0].name} 
+        ${'Song Sample: ' + music.preview_url}
+                    `, fs.appendFile('log.txt', `
+${music.name}
+Album: ${music.album.name}
+Artist: ${music.album.artists[0].name}
+Song Sample: ${music.preview_url}
+                            `, function (err) {
+                                if (err) throw err
+                                console.log('saved to log.txt!');
+                                },
+
+                        )
+                    )
+                }
+        )
 };
 
-processCommand(command, input);
+function movieThis(){
+    if (argument === undefined) {
+        argument = `Saving Private Ryan`
+    }
+    console.log('movie this: ' + argument);
+    
+    request(`http://www.omdbapi.com/?t=${argument}&y=&plot=short&apikey=trilogy`, function (error, response, body) {
+
+        if (!error && response.statusCode === 200) {
+            console.log(`${JSON.parse(body).Title}
+       ${'Release Year'}: ${JSON.parse(body).Year}
+       ${'IMDB Rating'}: ${JSON.parse(body).imdbRating}
+       ${'Rotten Tomatoes Rating'}: ${JSON.parse(body).Ratings[1].Value}
+       ${'Origin Country'}: ${JSON.parse(body).Country}
+       ${'Available Languages'}: ${JSON.parse(body).Language}
+       ${'Plot'}: ${JSON.parse(body).Plot}
+        ${'Actors'}: ${JSON.parse(body).Actors}`);
+        }
+        fs.appendFile('log.txt', `
+${JSON.parse(body).Title}
+Release Year: ${JSON.parse(body).Year}
+IMDB Rating: ${JSON.parse(body).imdbRating}
+Rotten Tomatoes Rating: ${JSON.parse(body).Ratings[1].Value}
+Origin Country: ${JSON.parse(body).Country}
+Available Languages: ${JSON.parse(body).Language}
+Plot: ${JSON.parse(body).Plot}
+Actors: ${JSON.parse(body).Actors}
+                `, function (err) {
+            if (err) throw err;
+            console.log('Saved to log.txt!');
+        });
+    });
+};
+
+function concertThis(){
+    bandsintown.getArtistEventList(argument).then(function (events) {
+
+    console.log(`
+    ${'Band: ' + argument}
+    ${'Venue Name: ' + events[0].venue.name}
+    ${'Location: ' + events[1].formatted_location}
+    ${'Date: ' + moment(events[0].datetime).format('L')}`);
+    fs.appendFile('log.txt', `
+${argument}
+Venue Name: ${events[0].venue.name}
+Location: ${events[1].formatted_location}
+Date: ${moment(events[0].datetime).format('L')}
+`,
+
+        function (err) {
+            if (err) throw err;
+            console.log('Saved to log.txt!');
+        });
+});
+};
+
+function doWhatItSays(){
+if (action === "spotify-this-song"){
+    console.log("spotifying: " + whatItSaysArgument);
+    argument = whatItSaysArgument;
+    spotifySong(argument);
+    }       
+};
+
+
+// if/then logic tree
+
+if (command === "spotify-this-song") {
+    if (process.argv[3] === undefined) {
+        argument = `"The Sign" Ace of Base`
+    }
+    spotifySong();} 
+    else if (command === "movie-this"){
+        movieThis();
+    }
+    else if (command === "concert-this"){
+        concertThis();
+    }
+    else if (command === "do-what-it-says") {
+    console.log('do what it says is activated')
+
+	fs.readFile("random.txt", "utf8", function(err, data) {
+		if (err) {
+			logOutput.error(err);
+		} else {
+            var randomArray = data.split(",");
+            
+			action = randomArray[0];
+			whatItSaysArgument = randomArray[1];
+
+            console.log("randomArray: " + randomArray);
+            console.log("action: " + action)
+            console.log("argument" + whatItSaysArgument);
+
+            doWhatItSays(action, whatItSaysArgument)
+		}
+	});          
+
+    }
